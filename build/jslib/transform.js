@@ -1,9 +1,3 @@
-/**
- * @license Copyright (c) 2012-2014, The Dojo Foundation All Rights Reserved.
- * Available via the MIT or new BSD license.
- * see: http://github.com/jrburke/requirejs for details
- */
-
 /*global define */
 
 define([ './esprimaAdapter', './parse', 'logger', 'lang'],
@@ -107,7 +101,7 @@ function (esprima, parse, logger, lang) {
                             //to limit impact of false positives.
                             needsId = true;
                             depAction = 'empty';
-                        } else if (firstArg.type === 'FunctionExpression') {
+                        } else if (parse.isFnExpression(firstArg)) {
                             //define(function(){})
                             factoryNode = firstArg;
                             needsId = true;
@@ -147,7 +141,7 @@ function (esprima, parse, logger, lang) {
                         //Already has an ID.
                         needsId = false;
                         if (args.length === 2 &&
-                            args[1].type === 'FunctionExpression') {
+                            parse.isFnExpression(args[1])) {
                             //Needs dependency scanning.
                             factoryNode = args[1];
                             depAction = 'scan';

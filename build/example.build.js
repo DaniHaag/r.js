@@ -48,6 +48,10 @@
         "baz": "../another/path/baz"
     },
 
+    //Sets up a map of module IDs to other module IDs. For more details, see
+    //the http://requirejs.org/docs/api.html#config-map docs.
+    map: {},
+
     //Configure CommonJS packages. See http://requirejs.org/docs/api.html#packages
     //for more information.
     packages: [],
@@ -82,6 +86,7 @@
     //ready. By wrapping those shimmed dependencies, this can be avoided, but
     //it could introduce other errors if those shimmed dependencies use the
     //global scope in weird ways, so it is not the default behavior to wrap.
+    //To use shim wrapping skipModuleInsertion needs to be false.
     //More notes in http://requirejs.org/docs/api.html#config-shim
     wrapShim: false,
 
@@ -94,8 +99,11 @@
     //How to optimize all the JS files in the build output directory.
     //Right now only the following values
     //are supported:
-    //- "uglify": (default) uses UglifyJS to minify the code.
-    //- "uglify2": in version 2.1.2+. Uses UglifyJS2.
+    //- "uglify": (default) uses UglifyJS to minify the code. Before version
+    //2.2, the uglify version was a 1.3.x release. With r.js 2.2, it is now
+    //a 2.x uglify release.
+    //- "uglify2": in version 2.1.2+. Uses UglifyJS2. As of r.js 2.2, this
+    //is just an alias for "uglify" now that 2.2 just uses uglify 2.x.
     //- "closure": uses Google's Closure Compiler in simple optimization
     //mode to minify the code. Only available if running the optimizer using
     //Java.
@@ -148,30 +156,20 @@
 
     //If using UglifyJS for script optimization, these config options can be
     //used to pass configuration values to UglifyJS.
-    //See https://github.com/mishoo/UglifyJS for the possible values.
+    //In r.js 2.2, this is now just uglify2, so see the 'uglify2' section below
+    //for example options. For r.js pre-2.2, this was for setting uglify 1.3.x
+    //options.
     uglify: {
-        toplevel: true,
-        ascii_only: true,
-        beautify: true,
-        max_line_length: 1000,
-
-        //How to pass uglifyjs defined symbols for AST symbol replacement,
-        //see "defines" options for ast_mangle in the uglifys docs.
-        defines: {
-            DEBUG: ['name', 'false']
-        },
-
-        //Custom value supported by r.js but done differently
-        //in uglifyjs directly:
-        //Skip the processor.ast_mangle() part of the uglify call (r.js 2.0.5+)
-        no_mangle: true
     },
 
-    //If using UglifyJS for script optimization, these config options can be
-    //used to pass configuration values to UglifyJS.
-    //For possible values see:
-    //http://lisperator.net/uglifyjs/codegen
-    //http://lisperator.net/uglifyjs/compress
+    //If using UglifyJS2 for script optimization, these config options can be
+    //used to pass configuration values to UglifyJS2. As of r.js 2.2, UglifyJS2
+    //is the only uglify option, so the config key can just be 'uglify' for
+    //r.js 2.2+.
+    //For possible `output` values see:
+    //https://github.com/mishoo/UglifyJS2#beautifier-options
+    //For possible `compress` values see:
+    //https://github.com/mishoo/UglifyJS2#compressor-options
     uglify2: {
         //Example of a specialized config. If you are fine
         //with the default options, no need to specify
@@ -195,7 +193,8 @@
     closure: {
         CompilerOptions: {},
         CompilationLevel: 'SIMPLE_OPTIMIZATIONS',
-        loggingLevel: 'WARNING'
+        loggingLevel: 'WARNING',
+        externExportsPath: './extern.js'
     },
 
     //Allow CSS optimizations. Allowed values:
@@ -406,23 +405,23 @@
         },
 
         //This module entry shows the use insertRequire (first available in 2.0):
-        //if the target module only calls define and does not call require()
-        //at the top level, and this build output is used with an AMD shim
-        //loader like almond, where the data-main script in the HTML page is
-        //replaced with just a script to the built file, if there is no
-        //top-level require, no modules will execute. specify insertRequire to
-        //have a require([]) call placed at the end of the file to trigger the
-        //execution of modules. More detail at
-        //https://github.com/jrburke/almond
-        //Note that insertRequire does not affect or add to the modules
-        //that are built into the build bundle. It just adds a require([])
-        //call to the end of the built file for use during the runtime
-        //execution of the built code.
         {
             name: "foo/baz",
             insertRequire: ["foo/baz"]
         }
     ],
+
+    //If the target module only calls define and does not call require() at the
+    //top level, and this build output is used with an AMD shim loader like
+    //almond, where the data-main script in the HTML page is replaced with just
+    //a script to the built file, if there is no top-level require, no modules
+    //will execute. specify insertRequire to have a require([]) call placed at
+    //the end of the file to trigger the execution of modules. More detail at
+    //https://github.com/requirejs/almond
+    //Note that insertRequire does not affect or add to the modules that are
+    //built into the build bundle. It just adds a require([]) call to the end
+    //of the built file for use during the runtime execution of the built code.
+    insertRequire: ['foo/bar/bop'],
 
     //If you only intend to optimize a module (and its dependencies), with
     //a single file as the output, you can specify the module options inline,
@@ -447,9 +446,15 @@
     out: function (text, sourceMapText) {
         //Do what you want with the optimized text here.
         //Starting in 2.1.10, if generateSourceMaps was set to true
-        //and optimize: 'uglify2' was used, then the second argument
-        //to this function, sourceMapText, will be the text of the source map.
+        //and optimize: 'uglify2' was used ('uglify' in r.js 2.2+), then the
+        //second argument to this function, sourceMapText, will be the text of
+        //the source map.
     },
+
+    //In 2.0.12+: by setting "out" to "stdout", the optimized output is written
+    //to STDOUT. This can be useful for integrating r.js with other commandline
+    //tools. In order to avoid additional output "logLevel: 4" should also be used.
+    out: "stdout",
 
     //Wrap any build bundle in a start and end text specified by wrap.
     //Use this to encapsulate the module code so that define/require are
@@ -565,7 +570,7 @@
 
     //Introduced in 2.1.3: Seed raw text contents for the listed module IDs.
     //These text contents will be used instead of doing a file IO call for
-    //those modules. Useful is some module ID contents are dynamically
+    //those modules. Useful if some module ID contents are dynamically
     //based on user input, which is common in web build tools.
     rawText: {
         'some/id': 'define(["another/id"], function () {});'
@@ -614,7 +619,7 @@
     skipSemiColonInsertion: false,
 
     //Introduced in 2.1.10: if set to true, will not strip amdefine use:
-    //https://github.com/jrburke/amdefine
+    //https://github.com/requirejs/amdefine
     //Normally you should not need to set this. It is only a concern if using
     //a built .js file from some other source, that may have included amdefine
     //in the built input. If you get a build error like
@@ -631,5 +636,22 @@
     //source code overwriting. However, use at your own risk, and be sure you
     //have your configuration set correctly. For example, you may want to
     //set "keepBuildDir" to true.
-    allowSourceOverwrites: false
+    allowSourceOverwrites: false,
+
+    //Introduced in 2.2.0. Path to file to write out bundles config
+    //(http://requirejs.org/docs/api.html#config-bundles) found in the module
+    //layers built by the optimizer. The path is relative to the "dir" config's
+    //path. Only applies to full project optimization:
+    //http://requirejs.org/docs/optimization.html#wholeproject
+    //Only use if the optimized layers are grouped more intricately then just
+    //a simple optimization of main app entry points. The file path specified
+    //should be to one that has the top level requirejs.config() call that sets
+    //up the loader. If using "mainConfigFile", then this path likely should be
+    //the path to that file where it is placed in the "dir" output directory.
+    bundlesConfigOutFile: 'some/path/to/main.js',
+
+    //Introduced in 2.2.0. Default is true for compatibility with older
+    //releases. If set to false, r.js will not write a build.txt file in the
+    //"dir" directory when doing a full project optimization.
+    writeBuildTxt: true
 })

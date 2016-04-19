@@ -1,16 +1,17 @@
 (function(root) {
 define("a", [], function() {
-      return (function() {
-
+  return (function() {
 (function (root) {
     root.A = {
         name: 'a'
     };
 }(this));
+
 return (function () {
                     window.globalA = this.A.name;
-                }.apply(this, arguments)) || A.name;      }).apply(root, arguments);
-    });
+                }.apply(this, arguments)) || A.name;
+  }).apply(root, arguments);
+});
 }(this));
 
 function D() {
@@ -18,34 +19,38 @@ function D() {
 };
 
 define("d", function(){});
+
 (function(root) {
 define("b", ["a","d"], function() {
-      return (function() {
-
+  return (function() {
 var B = {
     name: 'b',
     aValue: A.name,
     dValue: new D()
 };
-return root.B = B;      }).apply(root, arguments);
-    });
+//ending comment;
+return root.B = B;
+  }).apply(root, arguments);
+});
 }(this));
+
 (function(root) {
 define("c", ["a","b"], function() {
-      return (function() {
-
+  return (function() {
 var C = {
     name: 'c',
     a: A,
     b: B
 };
-return root.C = C;      }).apply(root, arguments);
-    });
+
+return root.C = C;
+  }).apply(root, arguments);
+});
 }(this));
+
 (function(root) {
 define("e", [], function() {
-      return (function() {
-
+  return (function() {
 var e = {
     nested: {
         e: {
@@ -53,29 +58,33 @@ var e = {
         }
     }
 };
+
 return (function () {
                     return {
                         name: e.nested.e.name + 'Modified'
                     };
-                }.apply(this, arguments)) || e.nested.e;      }).apply(root, arguments);
-    });
+                }.apply(this, arguments)) || e.nested.e;
+  }).apply(root, arguments);
+});
 }(this));
+
 (function(root) {
 define("f", ["a"], function() {
-      return (function() {
-
+  return (function() {
 var FCAP = {
     name: 'FCAP',
     globalA: A
 };
+
 return (function (a) {
                     return {
                         name: FCAP.name,
                         globalA: FCAP.globalA,
                         a: a
                     };
-                }.apply(this, arguments));      }).apply(root, arguments);
-    });
+                }.apply(this, arguments));
+  }).apply(root, arguments);
+});
 }(this));
 
 require({
@@ -136,3 +145,4 @@ require({
 );
 
 define("basic-tests", function(){});
+

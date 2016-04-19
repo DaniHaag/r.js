@@ -1,8 +1,3 @@
-/**
- * @license RequireJS Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
- * Available via the MIT or new BSD license.
- * see: http://github.com/jrburke/requirejs for details
- */
 /*
  * This file patches require.js to communicate with the build system.
  */
@@ -28,7 +23,18 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
     var allowRun = true,
         hasProp = lang.hasProp,
         falseProp = lang.falseProp,
-        getOwn = lang.getOwn;
+        getOwn = lang.getOwn,
+        // Used to strip out use strict from toString()'d functions for the
+        // shim config since they will explicitly want to not be bound by strict,
+        // but some envs, explicitly xpcshell, adds a use strict.
+        useStrictRegExp = /['"]use strict['"];/g,
+        //Absolute path if starts with /, \, or x:
+        absoluteUrlRegExp = /^[\/\\]|^\w:/;
+
+    //Turn off throwing on resolution conflict, that was just an older prim
+    //idea about finding errors early, but does not comply with how promises
+    //should operate.
+    prim.hideResolutionConflict = true;
 
     //This method should be called when the patches to require should take hold.
     return function () {
@@ -90,8 +96,10 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
         };
 
         function normalizeUrlWithBase(context, moduleName, url) {
-            //Adjust the URL if it was not transformed to use baseUrl.
-            if (require.jsExtRegExp.test(moduleName)) {
+            //Adjust the URL if it was not transformed to use baseUrl, but only
+            //if the URL is not already an absolute path.
+            if (require.jsExtRegExp.test(moduleName) &&
+                !absoluteUrlRegExp.test(url)) {
                 url = (context.config.dir || context.config.dirBaseUrl) + url;
             }
             return url;
@@ -135,7 +143,8 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
                             }
 
                             if (value.init) {
-                                str += '(' + value.init.toString() + '.apply(this, arguments))';
+                                str += '(' + value.init.toString()
+                                       .replace(useStrictRegExp, '') + '.apply(this, arguments))';
                             }
                             if (value.init && value.exports) {
                                 str += ' || ';
@@ -152,7 +161,8 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
                                 '    return function () {\n' +
                                 '        var ret, fn;\n' +
                                 (value.init ?
-                                        ('       fn = ' + value.init.toString() + ';\n' +
+                                        ('       fn = ' + value.init.toString()
+                                        .replace(useStrictRegExp, '') + ';\n' +
                                         '        ret = fn.apply(global, arguments);\n') : '') +
                                 (value.exports ?
                                         '        return ret || global.' + value.exports + ';\n' :
@@ -174,7 +184,7 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
 
                     if (mod && !mod.defined) {
                         if (parentId && getOwn(needFullExec, parentId)) {
-                            needFullExec[id] = true;
+                            needFullExec[id] = depMap;
                         }
 
                     } else if ((getOwn(needFullExec, id) && falseProp(fullExec, id)) ||
@@ -379,7 +389,7 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
                         pluginMod = getOwn(context.registry, pluginId);
 
                     context.plugins[pluginId] = true;
-                    context.needFullExec[pluginId] = true;
+                    context.needFullExec[pluginId] = map;
 
                     //If the module is not waiting to finish being defined,
                     //undef it and start over, to get full execution.
@@ -456,13 +466,26 @@ define([ 'env!env/file', 'pragma', 'parse', 'lang', 'logger', 'commonJs', 'prim'
             var id = map.id,
                 url;
 
+            // Fix up any maps that need to be normalized as part of the fullExec
+            // plumbing for plugins to participate in the build.
+            if (context.plugins && lang.hasProp(context.plugins, id)) {
+                lang.eachProp(context.needFullExec, function(value, prop) {
+                    // For plugin entries themselves, they do not have a map
+                    // value in needFullExec, just a "true" entry.
+                    if (value !== true && value.prefix === id && value.unnormalized) {
+                        var map = context.makeModuleMap(value.originalName, value.parentMap);
+                        context.needFullExec[map.id] = map;
+                    }
+                });
+            }
+
             //If build needed a full execution, indicate it
             //has been done now. But only do it if the context is tracking
             //that. Only valid for the context used in a build, not for
             //other contexts being run, like for useLib, plain requirejs
             //use in node/rhino.
             if (context.needFullExec && getOwn(context.needFullExec, id)) {
-                context.fullExec[id] = true;
+                context.fullExec[id] = map;
             }
 
             //A plugin.

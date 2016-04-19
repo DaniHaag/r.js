@@ -1,9 +1,3 @@
-/**
- * @license Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
- * Available via the MIT or new BSD license.
- * see: http://github.com/jrburke/requirejs for details
- */
-
 /*jslint plusplus: true */
 /*global define, java */
 
@@ -21,7 +15,9 @@ define(function () {
         return false;
     };
 
-    if (typeof java !== 'undefined' && java.lang && java.lang.Object) {
+    //Rhino, but not Nashorn (detected by importPackage not existing)
+    //Can have some strange foreign objects.
+    if (typeof java !== 'undefined' && java.lang && java.lang.Object && typeof importPackage !== 'undefined') {
         isJavaObj = function (obj) {
             return obj instanceof java.lang.Object;
         };
@@ -88,6 +84,31 @@ define(function () {
             return dest; // Object
         },
 
+        /**
+         * Does a deep mix of source into dest, where source values override
+         * dest values if a winner is needed.
+         * @param  {Object} dest destination object that receives the mixed
+         * values.
+         * @param  {Object} source source object contributing properties to mix
+         * in.
+         * @return {[Object]} returns dest object with the modification.
+         */
+        deepMix: function(dest, source) {
+            lang.eachProp(source, function (value, prop) {
+                if (typeof value === 'object' && value &&
+                    !lang.isArray(value) && !lang.isFunction(value) &&
+                    !(value instanceof RegExp)) {
+
+                    if (!dest[prop]) {
+                        dest[prop] = {};
+                    }
+                    lang.deepMix(dest[prop], value);
+                } else {
+                    dest[prop] = value;
+                }
+            });
+            return dest;
+        },
 
         /**
          * Does a type of deep copy. Do not give it anything fancy, best
@@ -95,16 +116,17 @@ define(function () {
          * JSON-serialized things, or has properties pointing to functions.
          * For non-array/object values, just returns the same object.
          * @param  {Object} obj      copy properties from this object
-         * @param  {Object} [result] optional result object to use
+         * @param  {Object} [ignoredProps] optional object whose own properties
+         * are keys that should be ignored.
          * @return {Object}
          */
-        deeplikeCopy: function (obj) {
+        deeplikeCopy: function (obj, ignoredProps) {
             var type, result;
 
             if (lang.isArray(obj)) {
                 result = [];
                 obj.forEach(function(value) {
-                    result.push(lang.deeplikeCopy(value));
+                    result.push(lang.deeplikeCopy(value, ignoredProps));
                 });
                 return result;
             }
@@ -119,7 +141,9 @@ define(function () {
             //Anything else is an object, hopefully.
             result = {};
             lang.eachProp(obj, function(value, key) {
-                result[key] = lang.deeplikeCopy(value);
+                if (!ignoredProps || !hasProp(ignoredProps, key)) {
+                    result[key] = lang.deeplikeCopy(value, ignoredProps);
+                }
             });
             return result;
         },

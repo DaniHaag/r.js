@@ -1,7 +1,6 @@
 /**
- * @license r.js 2.1.11+ Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
- * Available via the MIT or new BSD license.
- * see: http://github.com/jrburke/requirejs for details
+ * @license r.js 2.2.0 Copyright jQuery Foundation and other contributors.
+ * Released under MIT license, http://github.com/requirejs/r.js/LICENSE
  */
 
 /*
@@ -20,7 +19,7 @@ var requirejs, require, define, xpcUtil;
 (function (console, args, readFileFunc) {
     var fileName, env, fs, vm, path, exec, rhinoContext, dir, nodeRequire,
         nodeDefine, exists, reqMain, loadedOptimizedLib, existsForNode, Cc, Ci,
-        version = '2.1.11+',
+        version = '2.2.0',
         jsSuffixRegExp = /\.js$/,
         commandOption = '',
         useLibLoaded = {},
@@ -31,27 +30,10 @@ var requirejs, require, define, xpcUtil;
         readFile = typeof readFileFunc !== 'undefined' ? readFileFunc : null;
 
     function showHelp() {
-        console.log('See https://github.com/jrburke/r.js for usage.');
+        console.log('See https://github.com/requirejs/r.js for usage.');
     }
 
-    if ((typeof navigator !== 'undefined' && typeof document !== 'undefined') ||
-            (typeof importScripts !== 'undefined' && typeof self !== 'undefined')) {
-        env = 'browser';
-
-        readFile = function (path) {
-            return fs.readFileSync(path, 'utf8');
-        };
-
-        exec = function (string) {
-            return eval(string);
-        };
-
-        exists = function () {
-            console.log('x.js exists not applicable in browser env');
-            return false;
-        };
-
-    } else if (typeof process !== 'undefined' && process.versions && !!process.versions.node) {
+    if (typeof process !== 'undefined' && process.versions && !!process.versions.node) {
         env = 'node';
 
         //Get the fs module via Node's require before it
@@ -101,12 +83,23 @@ var requirejs, require, define, xpcUtil;
             fileName = args[1];
         }
 
-        //Set up execution context.
-        rhinoContext = Packages.org.mozilla.javascript.ContextFactory.getGlobal().enterContext();
+        //Exec/readFile differs between Rhino and Nashorn. Rhino has an
+        //importPackage where Nashorn does not, so branch on that. This is a
+        //coarser check -- detecting readFile existence might also be enough for
+        //this spot. However, sticking with importPackage to keep it the same
+        //as other Rhino/Nashorn detection branches.
+        if (typeof importPackage !== 'undefined') {
+            rhinoContext = Packages.org.mozilla.javascript.ContextFactory.getGlobal().enterContext();
 
-        exec = function (string, name) {
-            return rhinoContext.evaluateString(this, string, name, 0, null);
-        };
+            exec = function (string, name) {
+                return rhinoContext.evaluateString(this, string, name, 0, null);
+            };
+        } else {
+            exec = function (string, name) {
+                load({ script: string, name: name});
+            };
+            readFile = readFully;
+        }
 
         exists = function (fileName) {
             return (new java.io.File(fileName)).exists();
@@ -121,6 +114,23 @@ var requirejs, require, define, xpcUtil;
                 }
             };
         }
+    } else if ((typeof navigator !== 'undefined' && typeof document !== 'undefined') ||
+            (typeof importScripts !== 'undefined' && typeof self !== 'undefined')) {
+        env = 'browser';
+
+        readFile = function (path) {
+            return fs.readFileSync(path, 'utf8');
+        };
+
+        exec = function (string) {
+            return eval(string);
+        };
+
+        exists = function () {
+            console.log('x.js exists not applicable in browser env');
+            return false;
+        };
+
     } else if (typeof Components !== 'undefined' && Components.classes && Components.interfaces) {
         env = 'xpconnect';
 
@@ -409,7 +419,7 @@ var requirejs, require, define, xpcUtil;
     } else if (commandOption === 'v') {
         console.log('r.js: ' + version +
                     ', RequireJS: ' + this.requirejsVars.require.version +
-                    ', UglifyJS2: 2.4.12, UglifyJS: 1.3.4');
+                    ', UglifyJS: 2.6.1');
     } else if (commandOption === 'convert') {
         loadLib();
 

@@ -1,17 +1,11 @@
-/**
- * @license Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
- * Available via the MIT or new BSD license.
- * see: http://github.com/jrburke/requirejs for details
- */
-
 /*jslint plusplus: true, nomen: true, regexp: true */
 /*global define: false */
 
 define([ 'lang', 'logger', 'env!env/optimize', 'env!env/file', 'parse',
-         'pragma', 'uglifyjs/index', 'uglifyjs2',
+         'pragma', 'uglifyjs',
          'source-map'],
 function (lang,   logger,   envOptimize,        file,           parse,
-          pragma, uglify,             uglify2,
+          pragma, uglify,
           sourceMap) {
     'use strict';
 
@@ -19,6 +13,7 @@ function (lang,   logger,   envOptimize,        file,           parse,
         cssImportRegExp = /\@import\s+(url\()?\s*([^);]+)\s*(\))?([\w, ]*)(;)?/ig,
         cssCommentImportRegExp = /\/\*[^\*]*@import[^\*]*\*\//g,
         cssUrlRegExp = /\url\(\s*([^\)]+)\s*\)?/g,
+        protocolRegExp = /^\w+:/,
         SourceMapGenerator = sourceMap.SourceMapGenerator,
         SourceMapConsumer =sourceMap.SourceMapConsumer;
 
@@ -43,7 +38,7 @@ function (lang,   logger,   envOptimize,        file,           parse,
 
     function fixCssUrlPaths(fileName, path, contents, cssPrefix) {
         return contents.replace(cssUrlRegExp, function (fullMatch, urlMatch) {
-            var colonIndex, firstChar, parts, i,
+            var firstChar, hasProtocol, parts, i,
                 fixedUrlMatch = cleanCssUrlQuotes(urlMatch);
 
             fixedUrlMatch = fixedUrlMatch.replace(lang.backSlashRegExp, "/");
@@ -51,12 +46,11 @@ function (lang,   logger,   envOptimize,        file,           parse,
             //Only do the work for relative URLs. Skip things that start with / or #, or have
             //a protocol.
             firstChar = fixedUrlMatch.charAt(0);
-            colonIndex = fixedUrlMatch.indexOf(":");
-            if (firstChar !== "/" && firstChar !== "#" && (colonIndex === -1 || colonIndex > fixedUrlMatch.indexOf("/"))) {
+            hasProtocol = protocolRegExp.test(fixedUrlMatch);
+            if (firstChar !== "/" && firstChar !== "#" && !hasProtocol) {
                 //It is a relative URL, tack on the cssPrefix and path prefix
                 urlMatch = cssPrefix + path + fixedUrlMatch;
-
-            } else {
+            } else if (!hasProtocol) {
                 logger.trace(fileName + "\n  URL not a relative URL, skipping: " + urlMatch);
             }
 
@@ -409,40 +403,6 @@ function (lang,   logger,   envOptimize,        file,           parse,
 
         optimizers: {
             uglify: function (fileName, fileContents, outFileName, keepLines, config) {
-                var parser = uglify.parser,
-                    processor = uglify.uglify,
-                    ast, errMessage, errMatch;
-
-                config = config || {};
-
-                logger.trace("Uglifying file: " + fileName);
-
-                try {
-                    ast = parser.parse(fileContents, config.strict_semicolons);
-                    if (config.no_mangle !== true) {
-                        ast = processor.ast_mangle(ast, config);
-                    }
-                    ast = processor.ast_squeeze(ast, config);
-
-                    fileContents = processor.gen_code(ast, config);
-
-                    if (config.max_line_length) {
-                        fileContents = processor.split_lines(fileContents, config.max_line_length);
-                    }
-
-                    //Add trailing semicolon to match uglifyjs command line version
-                    fileContents += ';';
-                } catch (e) {
-                    errMessage = e.toString();
-                    errMatch = /\nError(\r)?\n/.exec(errMessage);
-                    if (errMatch) {
-                        errMessage = errMessage.substring(0, errMatch.index);
-                    }
-                    throw new Error('Cannot uglify file: ' + fileName + '. Skipping it. Error is:\n' + errMessage);
-                }
-                return fileContents;
-            },
-            uglify2: function (fileName, fileContents, outFileName, keepLines, config) {
                 var result, existingMap, resultMap, finalMap, sourceIndex,
                     uconfig = {},
                     existingMapPath = outFileName + '.map',
@@ -455,7 +415,7 @@ function (lang,   logger,   envOptimize,        file,           parse,
                 uconfig.fromString = true;
 
                 if (config.generateSourceMaps && (outFileName || config._buildSourceMap)) {
-                    uconfig.outSourceMap = baseName;
+                    uconfig.outSourceMap = baseName + '.map';
 
                     if (config._buildSourceMap) {
                         existingMap = JSON.parse(config._buildSourceMap);
@@ -466,19 +426,14 @@ function (lang,   logger,   envOptimize,        file,           parse,
                     }
                 }
 
-                logger.trace("Uglify2 file: " + fileName);
+                logger.trace("Uglify file: " + fileName);
 
                 try {
                     //var tempContents = fileContents.replace(/\/\/\# sourceMappingURL=.*$/, '');
-                    result = uglify2.minify(fileContents, uconfig, baseName + '.src.js');
+                    result = uglify.minify(fileContents, uconfig, baseName + '.src.js');
                     if (uconfig.outSourceMap && result.map) {
                         resultMap = result.map;
-                        if (existingMap) {
-                            resultMap = JSON.parse(resultMap);
-                            finalMap = SourceMapGenerator.fromSourceMap(new SourceMapConsumer(resultMap));
-                            finalMap.applySourceMap(new SourceMapConsumer(existingMap));
-                            resultMap = finalMap.toString();
-                        } else if (!config._buildSourceMap) {
+                        if (!existingMap && !config._buildSourceMap) {
                             file.saveFile(outFileName + '.src.js', fileContents);
                         }
 
@@ -488,13 +443,12 @@ function (lang,   logger,   envOptimize,        file,           parse,
                             config._buildSourceMap = resultMap;
                         } else {
                             file.saveFile(outFileName + '.map', resultMap);
-                            fileContents += "\n//# sourceMappingURL=" + baseName + ".map";
                         }
                     } else {
                         fileContents = result.code;
                     }
                 } catch (e) {
-                    throw new Error('Cannot uglify2 file: ' + fileName + '. Skipping it. Error is:\n' + e.toString());
+                    throw new Error('Cannot uglify file: ' + fileName + '. Skipping it. Error is:\n' + e.toString());
                 }
                 return fileContents;
             }
